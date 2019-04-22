@@ -3,17 +3,13 @@
 
 using namespace rpc;
 
-int main(int argc, char ** argv) {
-    if(argc != 2) {
-        std::cout << "Usage: sample_client <port>\n";
-        return 1;
-    }
+double compute_ap(const char * port, int b, int e) {
+    client<json::json_rpc> client(port);
+    double res = 0;
     
-    client<json::json_rpc> client(argv[1]);
-
     try {
-        for(int i = 0; i < 10; ++i) {
-            double res = client.call("add", {double(i*i), double(-i)});
+        for(int i = b; i <= e; ++i) {
+            res = client.call("add", {res, double(i)});
             std::cout << i << ": res = " << res << '\n';
         }
     } catch (const std::exception & e) {
@@ -21,10 +17,30 @@ int main(int argc, char ** argv) {
         return 1;
     }
     
-    client.stop();
+    return res;
+}
+
+int main(int argc, char ** argv) {
+    if(argc != 2) {
+        std::cout << "Usage: sample_client <port>\n";
+        return 1;
+    }
     
+    auto task1 = std::async(std::launch::async,
+            compute_ap, argv[1], 0, 10);
+    auto task2 = std::async(std::launch::async,
+            compute_ap, argv[1], 10, 20);
+    
+    double res1 = task1.get();
+    double res2 = task2.get();
+    
+    std::cout << "\n===== Summary =====\n"
+              << "First:  " << res1 << " == " << 10.0*11/2 << '\n'
+              << "Second: " << res2 << " == " << (10.0+20)*11/2 << '\n';
+    
+    client<json::json_rpc> client(argv[1]);
     try {
-        client.call("div", {10.0, 0.0});
+        client.call("div", {10.0, 0});
     } catch(const std::exception & e) {
         std::cout << e.what() << '\n';
     }
