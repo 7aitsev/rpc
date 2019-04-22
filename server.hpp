@@ -16,12 +16,12 @@
 
 #include "abstract_rpc.hpp"
 
-namespace rpc {
+using namespace boost::interprocess;
+using mutex = interprocess_mutex;
+using namespace boost::asio;
+using namespace boost::asio::ip;
 
-    using namespace boost::asio;
-    using namespace boost::asio::ip;
-    using namespace boost::interprocess;
-    using mutex = interprocess_mutex;
+namespace rpc {
 
     template<class RPC> class peer;
     
@@ -63,8 +63,12 @@ namespace rpc {
         void stop() {
             if(m_is_running) {
                 m_is_running = false;
-                m_sock.shutdown(tcp::socket::shutdown_both);
-                m_sock.close();
+                try {
+                    m_sock.shutdown(tcp::socket::shutdown_both);
+                    m_sock.close();
+                } catch (const std::exception & e) {
+                    // log
+                }
                 
                 ptr self = this->shared_from_this();
                 scoped_lock<mutex> lock(m_sd->peers_mx);
@@ -142,6 +146,7 @@ namespace rpc {
             resp_type resp;
             try {
                 resp.m_id = req.m_id;
+                // todo: check that a method exists
                 resp.m_result = m_sd->m_methods[req.m_method](
                         req.m_params[0], req.m_params[1]);
             } catch (const std::exception & e) {

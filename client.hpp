@@ -11,11 +11,11 @@
 #include <iostream>
 #include <boost/bind.hpp>
 
+using namespace boost::asio;
+using namespace boost::asio::ip;  
+   
 namespace rpc {
     
-   using namespace boost::asio;
-   using namespace boost::asio::ip;   
-   
    template<class RPC>
    class client {
    public:
@@ -24,7 +24,7 @@ namespace rpc {
        using err_type  = typename RPC::err_type;
 
        explicit client(uint16_t port)
-           :  m_ep(ip::address_v4::loopback(), port)
+           : m_ep(ip::address_v4::loopback(), port)
            , m_sock(m_ios) { }
            
        explicit client(const char * port)
@@ -36,7 +36,7 @@ namespace rpc {
                m_sock.connect(m_ep);
                m_is_connected = true;
            }
-           assert(params.size() == 2 && "Invalid # of params");
+           assert(params.size() == 2 && "Invalid number of params");
            make_call(method, params);
            return get_result();
        }
