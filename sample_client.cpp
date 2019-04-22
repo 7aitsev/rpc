@@ -38,12 +38,5 @@ int main(int argc, char ** argv) {
               << "First:  " << res1 << " == " << 10.0*11/2 << '\n'
               << "Second: " << res2 << " == " << (10.0+20)*11/2 << '\n';
     
-    client<json::json_rpc> client(argv[1]);
-    try {
-        client.call("div", {10.0, 0});
-    } catch(const std::exception & e) {
-        std::cout << e.what() << '\n';
-    }
-    
     return 0;
 }
