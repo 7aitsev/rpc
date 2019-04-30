@@ -1,5 +1,8 @@
 #include "json_rpc.hpp"
 
+#include <boost/foreach.hpp>
+#include <boost/property_tree/json_parser.hpp>
+
 namespace rpc {
 
     namespace json {
