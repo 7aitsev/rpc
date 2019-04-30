@@ -1,5 +1,4 @@
-#ifndef RPC_SERVER_HPP
-#define RPC_SERVER_HPP
+#pragma once
 
 #include <cstdint>
 #include <unordered_map>
@@ -20,37 +19,38 @@ using namespace boost::interprocess;
 using mutex = interprocess_mutex;
 using namespace boost::asio;
 using namespace boost::asio::ip;
+using boost::system::error_code;
 
 namespace rpc {
 
     template<class RPC> class peer;
-    
+
     template<class RPC>
     struct shared_data {
         using peer_ptr = boost::shared_ptr<peer<RPC>>;
         using array = std::vector<peer_ptr>;
         using func_type = std::function<double (double, double)>;
-        
+
         array peers;
         mutex peers_mx;
         std::unordered_map<std::string, func_type> m_methods;
     };
-    
+
     template<class RPC>
     class peer
-        : public boost::enable_shared_from_this<peer<RPC>>, boost::noncopyable {
+        : public boost::enable_shared_from_this<peer<RPC>>
+        , boost::noncopyable {
     public:
         using ptr = boost::shared_ptr<peer>;
         using sd_ptr = boost::shared_ptr<shared_data<RPC>>;
         using req_type  = typename RPC::req_type;
         using resp_type = typename RPC::resp_type;
         using err_type  = typename RPC::err_type;
-        
+
         peer(tcp::socket sock, sd_ptr & sd)
             : m_sock(std::move(sock))
-            , m_sd(sd)
-            , m_is_running(false) { }
-        
+            , m_sd(sd) { }
+
         void start() {
             m_is_running = true;
             {
@@ -59,7 +59,7 @@ namespace rpc {
             }
             recv_req();
         }
-        
+
         void stop() {
             if(m_is_running) {
                 m_is_running = false;
@@ -69,7 +69,7 @@ namespace rpc {
                 } catch (const std::exception & e) {
                     // log
                 }
-                
+
                 ptr self = this->shared_from_this();
                 scoped_lock<mutex> lock(m_sd->peers_mx);
                 auto it = std::find(
@@ -77,16 +77,16 @@ namespace rpc {
                 m_sd->peers.erase(it);
             }
         }
-        
+
     private:
         void recv_req() {
             auto self(this->shared_from_this());
             m_sock.async_read_some(buffer(m_data),
-                [this, self](boost::system::error_code ec, std::size_t length) {
+                [this, self](error_code ec, std::size_t length) {
                     if (! ec) {
                         if(! m_is_running) return;
                         m_curr_data_len = length;
-                        
+
                         if(! handle_req()) {
                             send_resp();
                         }
@@ -95,11 +95,11 @@ namespace rpc {
                     }
                 });
         }
-        
+
         void send_resp() {
             auto self(this->shared_from_this());
             boost::asio::async_write(m_sock, buffer(m_data, m_curr_data_len),
-                 [this, self](boost::system::error_code ec, std::size_t /*length*/) {
+                 [this, self](error_code ec, std::size_t /*length*/) {
                      if (! ec) {
                          if(! m_is_running) return;
                          m_data.fill(0);
@@ -109,7 +109,7 @@ namespace rpc {
                      }
                  });
         }
-        
+
         void write_to_buff(std::stringstream & ss) {
             std::string str_res(ss.str());
             //std::cout << str_res << str_res.size() << "\n";
@@ -168,9 +168,9 @@ namespace rpc {
         uint16_t m_curr_data_len = 0;
         sd_ptr m_sd;
         tcp::socket m_sock;
-        bool m_is_running;
+        bool m_is_running = false;
     };
-    
+
     template<class RPC>
     class server {
     public:
@@ -183,35 +183,36 @@ namespace rpc {
             , m_sock(m_ios)
             , m_sig(m_ios, SIGINT, SIGTERM) {
             m_sig.async_wait(
-                    [this](const boost::system::error_code & err, int signal) {
+                    [this](const error_code & err, int signal) {
                         m_ios.stop(); m_sig.clear();
                     });
         }
-        
+
         explicit server(const std::string & port)
             : server(boost::lexical_cast<uint16_t>(port)) { }
-        
+
         void run() {
             accept_loop();
             m_ios.run();
         }
-        
+
         void run(uint8_t threads_count) {
             for(uint8_t i = 0; i < threads_count; ++i) {
-                m_threads.create_thread(boost::bind(&server::run, boost::ref(*this)));
+                m_threads.create_thread(
+                        boost::bind(&server::run, boost::ref(*this)));
             }
             m_threads.join_all();
         }
-        
+
         void bind(std::string method, func_type func) {
             m_sd->m_methods.emplace(std::make_pair(
                     std::move(method), std::move(func)));
         }
-        
+
     private:
         void accept_loop() {
             m_acc.async_accept(m_sock,
-                [this](boost::system::error_code ec) {
+                [this](error_code ec) {
                     if (! ec) {
                         boost::make_shared<peer<RPC>>(
                                 std::move(m_sock), m_sd)->start();
@@ -222,17 +223,16 @@ namespace rpc {
                     accept_loop();
                 });
         }
-        
+
         io_service m_ios;
         tcp::endpoint m_ep;
         tcp::acceptor m_acc;
         tcp::socket m_sock;
         signal_set m_sig;
-        
-        typename peer<RPC>::sd_ptr m_sd = 
+
+        typename peer<RPC>::sd_ptr m_sd =
                 boost::make_shared<shared_data<RPC>>();
         boost::thread_group m_threads;
     };
 
 }
-#endif //RPC_SERVER_HPP
